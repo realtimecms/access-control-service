@@ -43,6 +43,9 @@ const PublicSessionInfo = definition.model({
     online: {
       type: Boolean
     },
+    lastOnline: {
+      type: Date
+    },
     user: {
       type: User
     }

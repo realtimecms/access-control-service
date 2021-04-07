@@ -19,6 +19,9 @@ const SessionAccessOnline = definition.model({
     },
     online: {
       type: Boolean
+    },
+    onlineTime: {
+      type: Date
     }
   },
   indexes: {
@@ -58,6 +61,9 @@ const UserAccessOnline = definition.model({
     },
     online: {
       type: Boolean
+    },
+    onlineTime: {
+      type: Date
     }
   },
   indexes: {
@@ -87,79 +93,79 @@ const UserAccessOnline = definition.model({
 
 definition.event({
   name: "publicSessionInfoOnline",
-  async execute({ publicSessionInfo }) {
-    await PublicSessionInfo.update(publicSessionInfo, { online: true })
+  async execute({ publicSessionInfo, lastOnline }) {
+    await PublicSessionInfo.update(publicSessionInfo, { online: true, lastOnline })
   }
 })
 definition.event({
   name: "publicSessionInfoOffline",
-  async execute({ publicSessionInfo }) {
-    await PublicSessionInfo.update(publicSessionInfo, { online: false })
+  async execute({ publicSessionInfo, lastOnline }) {
+    await PublicSessionInfo.update(publicSessionInfo, { online: false, lastOnline })
   }
 })
 definition.event({
   name: "sessionAccessOnline",
-  async execute({ access, publicInfo }) {
+  async execute({ access, publicInfo, lastOnline }) {
     const id = access + '_' + publicInfo
     await SessionAccessOnline.update(id, [
-      { op: 'merge', value: { id, access, publicInfo, online: true } }
+      { op: 'merge', value: { id, access, publicInfo, online: true, lastOnline } }
     ])
   }
 })
 definition.event({
   name: "sessionAccessOffline",
-  async execute({ access, publicInfo }) {
+  async execute({ access, publicInfo, lastOnline }) {
     const id = access + '_' + publicInfo
     await SessionAccessOnline.update(id, [
-      { op: 'merge', value: { id, access, publicInfo, online: false } }
+      { op: 'merge', value: { id, access, publicInfo, online: false, lastOnline } }
     ])
   }
 })
 definition.event({
   name: "userAccessOnline",
-  async execute({ access, user }) {
+  async execute({ access, user, lastOnline }) {
     const id = access + '_' + user
     await UserAccessOnline.update(id, [
-      { op: 'merge', value: { id, access, user, online: true } }
+      { op: 'merge', value: { id, access, user, online: true, lastOnline } }
     ])
   }
 })
 definition.event({
   name: "userAccessOffline",
-  async execute({ access, user }) {
+  async execute({ access, user, lastOnline }) {
     const id = access + '_' + user
     await UserAccessOnline.update(id, [
-      { op: 'merge', value: { id, access, user, online: false } }
+      { op: 'merge', value: { id, access, user, online: false, lastOnline } }
     ])
   }
 })
 definition.event({
   name: "allOffline",
-  async execute() {
+  async execute({ lastOnline }) {
     await app.dao.request(['database', 'query', app.databaseName, `(${
-        async (input, output, { table, index }) => {
+        async (input, output, { table, index, lastOnline }) => {
           await (await input.index(index)).range({
           }).onChange(async (ind, oldInd) => {
-            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false }])
+            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false, lastOnline }])
           })
         }
-    })`, { table: PublicSessionInfo.tableName, index: PublicSessionInfo.tableName+"_online" }])
+    })`, { table: PublicSessionInfo.tableName, index: PublicSessionInfo.tableName+"_online", lastOnline }])
     await app.dao.request(['database', 'query', app.databaseName, `(${
-        async (input, output, { table, index }) => {
+        async (input, output, { table, index, lastOnline }) => {
           await (await input.index(index)).range({
           }).onChange(async (ind, oldInd) => {
-            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false }])
+            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false, lastOnline }])
           })
         }
-    })`, { table: SessionAccessOnline.tableName, index: SessionAccessOnline.tableName+"_online" }])
+    })`, { table: SessionAccessOnline.tableName, index: SessionAccessOnline.tableName+"_online", lastOnline }])
     await app.dao.request(['database', 'query', app.databaseName, `(${
-        async (input, output, { table, index }) => {
+        async (input, output, { table, index, lastOnline }) => {
           await (await input.index(index)).range({
           }).onChange(async (ind, oldInd) => {
-            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false }])
+            output.table(table).update(ind.to, [{ op: 'set', property: 'online', value: false, lastOnline }])
           })
         }
-    })`, { table: UserAccessOnline.tableName, index: UserAccessOnline.tableName+"_online" }])
+    })`, { table: UserAccessOnline.tableName, index: UserAccessOnline.tableName+"_online", lastOnline }])
   }
 })
 
@@ -170,10 +176,25 @@ definition.trigger({
   async execute({ session }, context, emit) {
     const publicInfo = await getPublicInfo(session)
     console.log("SESSION TRIGGER ONLINE", publicInfo)
-    if(publicInfo) emit({
-      type: "publicSessionInfoOnline",
-      publicSessionInfo: publicInfo.id
-    })
+    if(publicInfo) {
+      if(!publicInfo.online) {
+        const timestamp = Date.now()
+        const time = (new Date()).toISOString()
+        ;(await app.connectToAnalytics()).saveEvents([
+          {
+            type: 'sessionOnline',
+            client: { sessionId: session },
+            timestamp, time,
+            offlineDuration: publicInfo.lastOnline ? Date.now() - (new Date(publicInfo.lastOnline)).getTime() : undefined
+          }
+        ])
+      }
+      emit({
+        type: "publicSessionInfoOnline",
+        publicSessionInfo: publicInfo.id,
+        lastOnline: new Date()
+      })
+    }
   }
 })
 
@@ -184,10 +205,25 @@ definition.trigger({
   async execute({ session }, context, emit) {
     const publicInfo = await getPublicInfo(session)
     console.log("SESSION TRIGGER OFFLINE", publicInfo)
-    if(publicInfo) emit({
-      type: "publicSessionInfoOffline",
-      publicSessionInfo: publicInfo.id
-    })
+    if(publicInfo) {
+      if(publicInfo.online && publicInfo.lastOnline) {
+        const timestamp = Date.now()
+        const time = (new Date()).toISOString()
+        ;(await app.connectToAnalytics()).saveEvents([
+          {
+            type: 'sessionOffline',
+            client: { sessionId: session },
+            timestamp, time,
+            onlineDuration: Date.now() - (new Date(publicInfo.lastOnline)).getTime()
+          }
+        ])
+      }
+      emit({
+        type: "publicSessionInfoOffline",
+        publicSessionInfo: publicInfo.id,
+        lastOnline: new Date()
+      })
+    }
   }
 })
 
@@ -199,11 +235,30 @@ definition.trigger({
     const publicInfo = await getPublicInfo(session)
     const access = toType + '_' + toId
     console.log("ACCESS ONLINE", access, publicInfo.id)
-    if(publicInfo) emit({
-      type: 'sessionAccessOnline',
-      access,
-      publicInfo: publicInfo.id
-    })
+    if(publicInfo) {
+      const sessionAccessOnline = await SessionAccessOnline.get(access + '_' + publicInfo.id)
+      if(!sessionAccessOnline || !sessionAccessOnline.online) {
+        const timestamp = Date.now()
+        const time = (new Date()).toISOString()
+        ;(await app.connectToAnalytics()).saveEvents([
+          {
+            type: 'sessionAccessOnline',
+            client: { sessionId: session },
+            toType, toId,
+            timestamp, time,
+            offlineDuration: (sessionAccessOnline && sessionAccessOnline.lastOnline)
+                ? Date.now() - (new Date(sessionAccessOnline.lastOnline)).getTime()
+                : undefined
+          }
+        ])
+      }
+      emit({
+        type: 'sessionAccessOnline',
+        access,
+        publicInfo: publicInfo.id,
+        lastOnline: new Date()
+      })
+    }
   }
 })
 definition.trigger({
@@ -213,11 +268,30 @@ definition.trigger({
   async execute({ session, parameters: [toType, toId]}, context, emit) {
     const publicInfo = await getPublicInfo(session)
     const access = toType + '_' + toId
-    if(publicInfo) emit({
-      type: 'sessionAccessOffline',
-      access,
-      publicInfo: publicInfo.id
-    })
+    if(publicInfo) {
+      const sessionAccessOnline = await SessionAccessOnline.get(access + '_' + publicInfo.id)
+      console.log("SESSION ACCESS O", sessionAccessOnline)
+      if(sessionAccessOnline && sessionAccessOnline.online && sessionAccessOnline.lastOnline) {
+        const timestamp = Date.now()
+        const time = (new Date()).toISOString()
+        console.log("SAVE ANALYTICS!", Date.now() - (new Date(sessionAccessOnline.lastOnline)).getTime())
+        ;(await app.connectToAnalytics()).saveEvents([
+          {
+            type: 'sessionAccessOffline',
+            client: { sessionId: session },
+            toType, toId,
+            timestamp, time,
+            onlineDuration: Date.now() - (new Date(sessionAccessOnline.lastOnline)).getTime()
+          }
+        ])
+      }
+      emit({
+        type: 'sessionAccessOffline',
+        access,
+        publicInfo: publicInfo.id,
+        lastOnline: new Date()
+      })
+    }
   }
 })
 
@@ -227,10 +301,27 @@ definition.trigger({
   },
   async execute({ user, parameters: [toType, toId]}, context, emit) {
     const access = toType + '_' + toId
+    const userAccessOnline = await UserAccessOnline.get(access + '_' + user)
+    if(!userAccessOnline || !userAccessOnline.online) {
+      const timestamp = Date.now()
+      const time = (new Date()).toISOString()
+      ;(await app.connectToAnalytics()).saveEvents([
+        {
+          type: 'userAccessOnline',
+          client: { user },
+          toType, toId,
+          timestamp, time,
+          offlineDuration: (userAccessOnline && userAccessOnline.lastOnline)
+              ? Date.now() - (new Date(userAccessOnline.lastOnline)).getTime()
+              : undefined
+        }
+      ])
+    }
     emit({
       type: 'userAccessOnline',
       access,
-      user
+      user,
+      lastOnline: new Date()
     })
   }
 })
@@ -240,10 +331,25 @@ definition.trigger({
   },
   async execute({ user, parameters: [toType, toId]}, context, emit) {
     const access = toType + '_' + toId
+    const userAccessOnline = await UserAccessOnline.get(access + '_' + user)
+    if(userAccessOnline && userAccessOnline.online && userAccessOnline.lastOnline) {
+      const timestamp = Date.now()
+      const time = (new Date()).toISOString()
+      ;(await app.connectToAnalytics()).saveEvents([
+        {
+          type: 'userAccessOffline',
+          client: { user },
+          toType, toId,
+          timestamp, time,
+          onlineDuration: Date.now() - (new Date(userAccessOnline.lastOnline)).getTime()
+        }
+      ])
+    }
     emit({
       type: 'userAccessOffline',
       access,
-      user
+      user,
+      lastOnline: new Date()
     })
   }
 })
