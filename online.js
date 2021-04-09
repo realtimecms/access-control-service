@@ -20,7 +20,7 @@ const SessionAccessOnline = definition.model({
     online: {
       type: Boolean
     },
-    onlineTime: {
+    lastOnline: {
       type: Date
     }
   },
@@ -62,7 +62,7 @@ const UserAccessOnline = definition.model({
     online: {
       type: Boolean
     },
-    onlineTime: {
+    lastOnline: {
       type: Date
     }
   },
