@@ -47,8 +47,7 @@ const PublicSessionInfo = definition.model({
       type: Date
     },
     user: {
-      type: User,
-      defaultValue: false
+      type: User
     }
   },
   indexes: {
