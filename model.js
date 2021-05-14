@@ -57,7 +57,28 @@ const PublicSessionInfo = definition.model({
       property: "online",
       function: async function(input, output) {
         const mapper =
-            (obj) => obj.online &&
+            (obj) => obj.online && ({ id: obj.id, to: obj.id })
+        await input.table('accessControl_PublicSessionInfo').onChange(
+            (obj, oldObj) => output.change(obj && mapper(obj), oldObj && mapper(oldObj))
+        )
+      }
+    },
+    neverOnline: {
+      property: ["online", "lastOnline"],
+      function: async function(input, output) {
+        const mapper =
+            (obj) => (!obj.online) && (!obj.lastOnline) &&
+                ({ id: obj.id, to: obj.id })
+        await input.table('accessControl_PublicSessionInfo').onChange(
+            (obj, oldObj) => output.change(obj && mapper(obj), oldObj && mapper(oldObj))
+        )
+      }
+    },
+    wasOnline: {
+      property: ["online", "lastOnline"],
+      function: async function(input, output) {
+        const mapper =
+            (obj) => (obj.online || obj.lastOnline) &&
                 ({ id: obj.id, to: obj.id })
         await input.table('accessControl_PublicSessionInfo').onChange(
             (obj, oldObj) => output.change(obj && mapper(obj), oldObj && mapper(oldObj))

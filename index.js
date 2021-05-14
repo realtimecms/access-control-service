@@ -24,7 +24,7 @@ definition.trigger({
       publicInfo = {
         id: app.generateUid(),
         session,
-        online: true
+        //online: true
       }
       await PublicSessionInfo.create(publicInfo)
       emit({
