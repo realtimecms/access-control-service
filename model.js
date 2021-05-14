@@ -1,4 +1,3 @@
-
 const definition = require('./definition.js')
 
 const Session = definition.foreignModel('session', 'Session')
