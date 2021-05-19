@@ -1,6 +1,8 @@
+const app = require("@live-change/framework").app()
 const { combineRoles } = require('../config/roles.js')
 
-function access(app, definition) {
+
+function access(definition) {
 
   const Membership = definition.foreignModel('members', 'Membership')
   const Access = definition.foreignModel('accessControl', 'Access')

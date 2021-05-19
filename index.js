@@ -3,7 +3,7 @@ const definition = require('./definition.js')
 const { combineRoles, rolesCombiner, roleLevels } = require('../config/roles.js')
 
 const { getAccess, hasRole, checkIfRole, getPublicInfo } =
-    require("../access-control-service/access.js")(app, definition)
+    require("../access-control-service/access.js")(definition)
 
 const { Access, PublicSessionInfo, SessionAccess, Session, User, Membership } = require('./model.js')
 

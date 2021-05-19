@@ -2,7 +2,7 @@ const app = require("@live-change/framework").app()
 const definition = require('./definition.js')
 
 const { getAccess, hasRole, checkIfRole, getPublicInfo } =
-    require("../access-control-service/access.js")(app, definition)
+    require("../access-control-service/access.js")(definition)
 
 const { Access, PublicSessionInfo, SessionAccess, Session, User, Membership } = require('./model.js')
 
